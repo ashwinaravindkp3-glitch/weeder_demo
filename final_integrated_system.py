@@ -37,56 +37,6 @@ CAPTURE_DELAY_S = 5
 OUTPUT_BBOX_IMAGE_PATH = 'output/processed_frame_bboxes.jpg'
 OUTPUT_GRID_IMAGE_PATH = 'output/processed_frame_grid.jpg'
 
-def create_synthetic_field_image():
-    """
-    Create a synthetic field image with weeds for testing when no camera is available.
-
-    Returns:
-        numpy.ndarray: A synthetic field image with weeds
-    """
-    # Create base field image (green background)
-    image = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
-    image[:, :] = (34, 139, 34)  # Forest green for field
-
-    # Add some random variation to simulate field texture
-    noise = np.random.randint(-20, 20, (IMAGE_HEIGHT, IMAGE_WIDTH, 3))
-    image = np.clip(image.astype(int) + noise, 0, 255).astype(np.uint8)
-
-    # Add synthetic weeds (bright green/yellow spots to simulate weeds)
-    weed_positions = [
-        (150, 120), (320, 200), (450, 150),
-        (200, 300), (380, 350), (500, 280),
-        (100, 400), (250, 180)
-    ]
-
-    for x, y in weed_positions:
-        # Draw weed as a bright yellowish-green circle
-        cv2.circle(image, (x, y), 20, (0, 255, 150), -1)
-
-        # Add some texture to the weed
-        for _ in range(8):
-            offset_x = np.random.randint(-15, 15)
-            offset_y = np.random.randint(-15, 15)
-            cv2.circle(image, (x + offset_x, y + offset_y), 5, (50, 220, 100), -1)
-
-        # Add weed center
-        cv2.circle(image, (x, y), 5, (0, 255, 255), -1)
-
-    # Add some crop plants (darker green circles)
-    crop_positions = [
-        (80, 80), (180, 80), (280, 80), (380, 80), (480, 80), (580, 80),
-        (80, 240), (180, 240), (280, 240), (380, 240), (480, 240), (580, 240),
-        (80, 400), (180, 400), (280, 400), (380, 400), (480, 400), (580, 400)
-    ]
-
-    for x, y in crop_positions:
-        cv2.circle(image, (x, y), 12, (20, 100, 20), -1)
-        cv2.circle(image, (x, y), 6, (10, 80, 10), -1)
-
-    logger.info(f"Created synthetic field image: {IMAGE_WIDTH}x{IMAGE_HEIGHT} with {len(weed_positions)} weeds")
-
-    return image
-
 def main():
     """Main function to run the final integrated system."""
     logger.info("====================================================")
@@ -127,30 +77,58 @@ def main():
         return
 
     try:
-        logger.info(f"System ready. Waiting for {CAPTURE_DELAY_S} seconds before capture.")
-        time.sleep(CAPTURE_DELAY_S)
+        logger.info("=" * 60)
+        logger.info("CAMERA PREVIEW MODE - Press 'c' to capture, 'q' to quit")
+        logger.info("=" * 60)
 
-        logger.debug("Attempting to capture frame...")
-        ret, frame = cap.read()
-        if not ret:
-            logger.error("Failed to capture frame from camera.")
+        frame_to_process = None
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                logger.error("Failed to read frame from camera.")
+                break
+
+            # Calculate frame statistics for debugging
+            mean_brightness = np.mean(frame)
+            mean_color = np.mean(frame, axis=(0, 1))
+
+            # Create display frame with debug info
+            display_frame = frame.copy()
+
+            # Add debug information overlay
+            cv2.putText(display_frame, f"Brightness: {mean_brightness:.1f}", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display_frame, f"BGR: ({mean_color[0]:.1f}, {mean_color[1]:.1f}, {mean_color[2]:.1f})",
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display_frame, "Press 'c' to CAPTURE and process", (10, 450),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(display_frame, "Press 'q' to QUIT", (10, 470),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            # Show camera preview
+            cv2.imshow("Camera Preview - Debug Mode", display_frame)
+
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                logger.info("User quit camera preview.")
+                cap.release()
+                cv2.destroyAllWindows()
+                return
+            elif key == ord('c'):
+                logger.info("User captured frame for processing.")
+                frame_to_process = frame.copy()
+                cv2.destroyAllWindows()
+                break
+
+        if frame_to_process is None:
+            logger.error("No frame captured.")
             return
 
-        # Check if frame is mostly black (camera not working properly)
-        if frame is not None:
-            mean_brightness = np.mean(frame)
-            logger.debug(f"Frame mean brightness: {mean_brightness}")
-
-            if mean_brightness < 10:  # Frame is too dark, likely no camera input
-                logger.warning("Camera frame is too dark (likely no camera connected). Using synthetic test image.")
-                frame = create_synthetic_field_image()
-                logger.info("Using synthetic field image for testing.")
-            else:
-                logger.info("Frame captured successfully from camera.")
-        else:
-            logger.error("Frame is None. Using synthetic test image.")
-            frame = create_synthetic_field_image()
-            logger.info("Using synthetic field image for testing.")
+        frame = frame_to_process
+        mean_brightness = np.mean(frame)
+        logger.info(f"Frame captured successfully. Brightness: {mean_brightness:.1f}")
 
         logger.debug("Preprocessing frame...")
         enhanced_frame = hardware.smart_enhance(frame)
