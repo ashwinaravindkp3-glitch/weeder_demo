@@ -5,13 +5,6 @@ import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-try:
-    import RPi.GPIO as GPIO
-    HARDWARE_AVAILABLE = True
-except ImportError:
-    logger.warning("RPi.GPIO not found. Running in mock mode.")
-    HARDWARE_AVAILABLE = False
-
 class ServoTester:
     """Interactive tool for testing and diagnosing individual servos."""
 
@@ -32,17 +25,22 @@ class ServoTester:
 
     def initialize_hardware(self):
         """Initialize GPIO and PWM controllers."""
-        if not HARDWARE_AVAILABLE:
-            logger.info("Mock hardware initialized.")
+        try:
+            import RPi.GPIO as GPIO
+            self.GPIO = GPIO
+            self.HARDWARE_AVAILABLE = True
+        except (ImportError, RuntimeError):
+            logger.warning("RPi.GPIO not found or not running on a Raspberry Pi. Hardware functions disabled.")
+            self.HARDWARE_AVAILABLE = False
             return
 
         logger.info("Initializing GPIO for servo testing...")
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setwarnings(False)
-        
+        self.GPIO.setmode(self.GPIO.BOARD)
+        self.GPIO.setwarnings(False)
+
         for name, pin in self.SERVO_PINS.items():
-            GPIO.setup(pin, GPIO.OUT)
-            self.pwm_controllers[name] = GPIO.PWM(pin, self.PWM_FREQ)
+            self.GPIO.setup(pin, self.GPIO.OUT)
+            self.pwm_controllers[name] = self.GPIO.PWM(pin, self.PWM_FREQ)
             self.pwm_controllers[name].start(0)
             logger.info(f"Initialized {name} servo on pin {pin}")
 
@@ -60,7 +58,7 @@ class ServoTester:
             logger.warning("Angle must be between 0 and 180.")
             return
 
-        if HARDWARE_AVAILABLE:
+        if self.HARDWARE_AVAILABLE:
             duty_cycle = self.angle_to_duty_cycle(angle)
             self.pwm_controllers[name].ChangeDutyCycle(duty_cycle)
         
@@ -122,11 +120,11 @@ class ServoTester:
 
     def cleanup(self):
         """Stop PWM and clean up GPIO resources."""
-        if HARDWARE_AVAILABLE:
+        if self.HARDWARE_AVAILABLE:
             logger.info("Cleaning up GPIO resources...")
             for pwm in self.pwm_controllers.values():
                 pwm.stop()
-            GPIO.cleanup()
+            self.GPIO.cleanup()
         logger.info("Servo diagnostic tool finished.")
 
 def run_diagnostics():
