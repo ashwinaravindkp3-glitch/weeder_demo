@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 import logging
 
@@ -186,6 +187,22 @@ class PrecisionGridMapper:
         result += f"Cell size: {self.cell_width}x{self.cell_height}px\n"
         
         return result
+
+    def draw_grid(self, image):
+        """
+        Draw the grid on the given image.
+
+        Args:
+            image: The image to draw the grid on.
+
+        Returns:
+            The image with the grid drawn on it.
+        """
+        for x in range(0, self.image_width, self.cell_width):
+            cv2.line(image, (x, 0), (x, self.image_height), (255, 255, 255), 1)
+        for y in range(0, self.image_height, self.cell_height):
+            cv2.line(image, (0, y), (self.image_width, y), (255, 255, 255), 1)
+        return image
     
     def get_weeding_priority(self, detections):
         """
