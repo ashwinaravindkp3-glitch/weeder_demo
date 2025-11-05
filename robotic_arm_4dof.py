@@ -6,13 +6,6 @@ import math
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-try:
-    import RPi.GPIO as GPIO
-    HARDWARE_AVAILABLE = True
-except ImportError:
-    logger.warning("RPi.GPIO not found. Running in mock mode.")
-    HARDWARE_AVAILABLE = False
-
 class RoboticArm4DOF:
     """Controller for a 4-DOF robotic arm with base, shoulder, elbow, and gripper."""
     
@@ -41,24 +34,29 @@ class RoboticArm4DOF:
         
     def initialize_hardware(self):
         """Initialize GPIO for all four servos."""
-        if not HARDWARE_AVAILABLE:
-            logger.info("Mock mode: Simulating 4-DOF arm")
-            return True
-            
+        try:
+            import RPi.GPIO as GPIO
+            self.GPIO = GPIO
+            self.HARDWARE_AVAILABLE = True
+        except (ImportError, RuntimeError):
+            logger.warning("RPi.GPIO not found or not running on a Raspberry Pi. Hardware functions disabled.")
+            self.HARDWARE_AVAILABLE = False
+            return False
+
         logger.info("Initializing 4-DOF robotic arm...")
-        GPIO.setmode(GPIO.BOARD)
-        GPIO.setwarnings(False)
-        
+        self.GPIO.setmode(self.GPIO.BOARD)
+        self.GPIO.setwarnings(False)
+
         servo_pins = [self.SERVO_BASE, self.SERVO_SHOULDER, self.SERVO_ELBOW, self.SERVO_GRIPPER]
-        
+
         for pin in servo_pins:
-            GPIO.setup(pin, GPIO.OUT)
-            self.pwm_controllers[pin] = GPIO.PWM(pin, self.PWM_FREQ)
+            self.GPIO.setup(pin, self.GPIO.OUT)
+            self.pwm_controllers[pin] = self.GPIO.PWM(pin, self.PWM_FREQ)
             self.pwm_controllers[pin].start(0)
-            
+
         # Initialize to safe starting positions
         self.move_to_home()
-        
+
         logger.info("4-DOF arm initialized successfully")
         return True
     
@@ -76,7 +74,7 @@ class RoboticArm4DOF:
         }
         pin = pin_map[servo_name]
         
-        if HARDWARE_AVAILABLE:
+        if self.HARDWARE_AVAILABLE:
             duty_cycle = self._angle_to_duty_cycle(angle)
             self.pwm_controllers[pin].ChangeDutyCycle(duty_cycle)
             time.sleep(delay)
@@ -155,11 +153,11 @@ class RoboticArm4DOF:
     
     def cleanup(self):
         """Cleanup GPIO resources."""
-        if HARDWARE_AVAILABLE:
+        if self.HARDWARE_AVAILABLE:
             logger.info("Cleaning up 4-DOF arm...")
             for pwm in self.pwm_controllers.values():
                 pwm.stop()
-            GPIO.cleanup()
+            self.GPIO.cleanup()
         logger.info("Cleanup completed")
 
 # Mock controller for testing without hardware
@@ -198,27 +196,24 @@ class MockRoboticArm4DOF:
 def main():
     """Main function to test the 4-DOF robotic arm."""
     logger.info("Starting 4-DOF robotic arm test...")
-    
-    try:
-        arm = RoboticArm4DOF()
-    except NameError:
-        arm = MockRoboticArm4DOF()
-    
+
+    arm = RoboticArm4DOF()
     if not arm.initialize_hardware():
-        logger.error("Failed to initialize hardware")
-        return
-    
+        logger.info("Hardware initialization failed. Using MockRoboticArm4DOF for testing.")
+        arm = MockRoboticArm4DOF()
+        arm.initialize_hardware()
+
     try:
         # Test a pick-and-place sequence
         logger.info("=== TESTING PICK-AND-PLACE ===")
         # Simulate a target at grid column 12 (of 16) and 20cm away
         arm.perform_pick_and_place(target_grid_col=12, grid_cols=16, distance_cm=20)
-        
+
         logger.info("Test completed successfully!")
-        
+
     except KeyboardInterrupt:
         logger.info("Test interrupted by user")
-        
+
     finally:
         arm.cleanup()
 
