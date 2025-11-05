@@ -5,6 +5,7 @@ import torch
 from ultralytics import YOLO
 from PIL import Image
 import os
+import numpy as np
 
 # Import custom modules
 from precision_grid_mapper import PrecisionGridMapper
@@ -35,6 +36,56 @@ ARM_LENGTH_CM = 30
 CAPTURE_DELAY_S = 5
 OUTPUT_BBOX_IMAGE_PATH = 'output/processed_frame_bboxes.jpg'
 OUTPUT_GRID_IMAGE_PATH = 'output/processed_frame_grid.jpg'
+
+def create_synthetic_field_image():
+    """
+    Create a synthetic field image with weeds for testing when no camera is available.
+
+    Returns:
+        numpy.ndarray: A synthetic field image with weeds
+    """
+    # Create base field image (green background)
+    image = np.zeros((IMAGE_HEIGHT, IMAGE_WIDTH, 3), dtype=np.uint8)
+    image[:, :] = (34, 139, 34)  # Forest green for field
+
+    # Add some random variation to simulate field texture
+    noise = np.random.randint(-20, 20, (IMAGE_HEIGHT, IMAGE_WIDTH, 3))
+    image = np.clip(image.astype(int) + noise, 0, 255).astype(np.uint8)
+
+    # Add synthetic weeds (bright green/yellow spots to simulate weeds)
+    weed_positions = [
+        (150, 120), (320, 200), (450, 150),
+        (200, 300), (380, 350), (500, 280),
+        (100, 400), (250, 180)
+    ]
+
+    for x, y in weed_positions:
+        # Draw weed as a bright yellowish-green circle
+        cv2.circle(image, (x, y), 20, (0, 255, 150), -1)
+
+        # Add some texture to the weed
+        for _ in range(8):
+            offset_x = np.random.randint(-15, 15)
+            offset_y = np.random.randint(-15, 15)
+            cv2.circle(image, (x + offset_x, y + offset_y), 5, (50, 220, 100), -1)
+
+        # Add weed center
+        cv2.circle(image, (x, y), 5, (0, 255, 255), -1)
+
+    # Add some crop plants (darker green circles)
+    crop_positions = [
+        (80, 80), (180, 80), (280, 80), (380, 80), (480, 80), (580, 80),
+        (80, 240), (180, 240), (280, 240), (380, 240), (480, 240), (580, 240),
+        (80, 400), (180, 400), (280, 400), (380, 400), (480, 400), (580, 400)
+    ]
+
+    for x, y in crop_positions:
+        cv2.circle(image, (x, y), 12, (20, 100, 20), -1)
+        cv2.circle(image, (x, y), 6, (10, 80, 10), -1)
+
+    logger.info(f"Created synthetic field image: {IMAGE_WIDTH}x{IMAGE_HEIGHT} with {len(weed_positions)} weeds")
+
+    return image
 
 def main():
     """Main function to run the final integrated system."""
@@ -84,7 +135,22 @@ def main():
         if not ret:
             logger.error("Failed to capture frame from camera.")
             return
-        logger.info("Frame captured successfully.")
+
+        # Check if frame is mostly black (camera not working properly)
+        if frame is not None:
+            mean_brightness = np.mean(frame)
+            logger.debug(f"Frame mean brightness: {mean_brightness}")
+
+            if mean_brightness < 10:  # Frame is too dark, likely no camera input
+                logger.warning("Camera frame is too dark (likely no camera connected). Using synthetic test image.")
+                frame = create_synthetic_field_image()
+                logger.info("Using synthetic field image for testing.")
+            else:
+                logger.info("Frame captured successfully from camera.")
+        else:
+            logger.error("Frame is None. Using synthetic test image.")
+            frame = create_synthetic_field_image()
+            logger.info("Using synthetic field image for testing.")
 
         logger.debug("Preprocessing frame...")
         enhanced_frame = hardware.smart_enhance(frame)
