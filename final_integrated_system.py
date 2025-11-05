@@ -9,7 +9,7 @@ import os
 # Import custom modules
 from precision_grid_mapper import PrecisionGridMapper
 from robotic_arm_4dof import RoboticArm4DOF, MockRoboticArm4DOF
-from hardware_deployment import HardwareDeployment
+from hardware_deployment import smart_enhance, auto_white_balance
 
 # Configure logging
 # Create logs directory if it doesn't exist
@@ -44,7 +44,6 @@ def main():
     # --- Initialize Components ---\
     logger.debug("Initializing components...")
     grid_mapper = PrecisionGridMapper(IMAGE_WIDTH, IMAGE_HEIGHT, GRID_ROWS, GRID_COLS)
-    hardware = HardwareDeployment()
     logger.debug("Grid Mapper initialized.")
 
     try:
@@ -86,8 +85,8 @@ def main():
         logger.info("Frame captured successfully.")
 
         logger.debug("Preprocessing frame...")
-        enhanced_frame = hardware.smart_enhance(frame)
-        balanced_frame = hardware.auto_white_balance(enhanced_frame)
+        enhanced_frame = smart_enhance(frame)
+        balanced_frame = auto_white_balance(enhanced_frame)
         logger.debug("Frame preprocessing complete.")
 
         logger.info("Performing weed detection...")
