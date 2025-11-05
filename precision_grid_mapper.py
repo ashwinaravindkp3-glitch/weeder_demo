@@ -203,6 +203,31 @@ class PrecisionGridMapper:
         for y in range(0, self.image_height, self.cell_height):
             cv2.line(image, (0, y), (self.image_width, y), (255, 255, 255), 1)
         return image
+
+    def draw_target_cell(self, image, grid_x, grid_y, color=(0, 0, 255), alpha=0.4):
+        """
+        Draw a semi-transparent overlay over the target grid cell.
+
+        Args:
+            image: The image to draw on.
+            grid_x: The x-coordinate of the grid cell.
+            grid_y: The y-coordinate of the grid cell.
+            color: The color of the overlay (B, G, R).
+            alpha: The transparency of the overlay.
+
+        Returns:
+            The image with the target cell highlighted.
+        """
+        x1 = grid_x * self.cell_width
+        y1 = grid_y * self.cell_height
+        x2 = x1 + self.cell_width
+        y2 = y1 + self.cell_height
+
+        overlay = image.copy()
+        cv2.rectangle(overlay, (x1, y1), (x2, y2), color, -1)
+
+        image_with_overlay = cv2.addWeighted(overlay, alpha, image, 1 - alpha, 0)
+        return image_with_overlay
     
     def get_weeding_priority(self, detections):
         """
