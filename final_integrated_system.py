@@ -5,6 +5,7 @@ import torch
 from ultralytics import YOLO
 from PIL import Image
 import os
+import numpy as np
 
 # Import custom modules
 from precision_grid_mapper import PrecisionGridMapper
@@ -76,15 +77,58 @@ def main():
         return
 
     try:
-        logger.info(f"System ready. Waiting for {CAPTURE_DELAY_S} seconds before capture.")
-        time.sleep(CAPTURE_DELAY_S)
+        logger.info("=" * 60)
+        logger.info("CAMERA PREVIEW MODE - Press 'c' to capture, 'q' to quit")
+        logger.info("=" * 60)
 
-        logger.debug("Attempting to capture frame...")
-        ret, frame = cap.read()
-        if not ret:
-            logger.error("Failed to capture frame from camera.")
+        frame_to_process = None
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                logger.error("Failed to read frame from camera.")
+                break
+
+            # Calculate frame statistics for debugging
+            mean_brightness = np.mean(frame)
+            mean_color = np.mean(frame, axis=(0, 1))
+
+            # Create display frame with debug info
+            display_frame = frame.copy()
+
+            # Add debug information overlay
+            cv2.putText(display_frame, f"Brightness: {mean_brightness:.1f}", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display_frame, f"BGR: ({mean_color[0]:.1f}, {mean_color[1]:.1f}, {mean_color[2]:.1f})",
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(display_frame, "Press 'c' to CAPTURE and process", (10, 450),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            cv2.putText(display_frame, "Press 'q' to QUIT", (10, 470),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+            # Show camera preview
+            cv2.imshow("Camera Preview - Debug Mode", display_frame)
+
+            # Handle key presses
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                logger.info("User quit camera preview.")
+                cap.release()
+                cv2.destroyAllWindows()
+                return
+            elif key == ord('c'):
+                logger.info("User captured frame for processing.")
+                frame_to_process = frame.copy()
+                cv2.destroyAllWindows()
+                break
+
+        if frame_to_process is None:
+            logger.error("No frame captured.")
             return
-        logger.info("Frame captured successfully.")
+
+        frame = frame_to_process
+        mean_brightness = np.mean(frame)
+        logger.info(f"Frame captured successfully. Brightness: {mean_brightness:.1f}")
 
         logger.debug("Preprocessing frame...")
         enhanced_frame = hardware.smart_enhance(frame)
