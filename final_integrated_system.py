@@ -138,14 +138,26 @@ def main():
         logger.info("Performing weed detection...")
         results = model(balanced_frame, verbose=False)
         detections = results[0].boxes.data
-        logger.info(f"Detection complete. Found {len(detections)} potential targets.")
+        logger.info(f"Detection complete. Found {len(detections)} total detections.")
 
-        if len(detections) > 0:
-            logger.info(f"Processing {len(detections)} detected weed(s)...")
+        # Separate crops and weeds by class
+        crops = []
+        weeds = []
+        for det in detections:
+            x1, y1, x2, y2, conf, cls = det
+            if int(cls) == 0:  # Class 0 = Crop
+                crops.append(det)
+            elif int(cls) == 1:  # Class 1 = Weed
+                weeds.append(det)
 
-            # Prioritize detections using the grid mapper
+        logger.info(f"Classified: {len(crops)} crops, {len(weeds)} weeds")
+
+        if len(weeds) > 0:
+            logger.info(f"Processing {len(weeds)} detected weed(s)...")
+
+            # Prioritize weed detections using the grid mapper
             weed_list = []
-            for i, det in enumerate(detections):
+            for i, det in enumerate(weeds):
                 x1, y1, x2, y2, conf, cls = det
                 center_x = int((x1 + x2) / 2)
                 center_y = int((y1 + y2) / 2)
@@ -238,23 +250,43 @@ def main():
 
         # --- Image with Bounding Boxes ---
         image_with_bboxes = balanced_frame.copy()
-        for i, det in enumerate(detections):
-            x1, y1, x2, y2, conf, cls = map(int, det[:4])
-            # Draw bounding box
+
+        # Draw crops with blue boxes
+        for i, det in enumerate(crops):
+            x1, y1, x2, y2, conf, cls = det
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            # Draw bounding box in blue for crops
+            cv2.rectangle(image_with_bboxes, (x1, y1), (x2, y2), (255, 0, 0), 2)
+            # Add crop label
+            label = f"Crop {i+1}"
+            cv2.putText(image_with_bboxes, label, (x1, y1 - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+
+        # Draw weeds with green boxes
+        for i, det in enumerate(weeds):
+            x1, y1, x2, y2, conf, cls = det
+            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+            # Draw bounding box in green for weeds
             cv2.rectangle(image_with_bboxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            # Add weed ID label
+            # Add weed label
             label = f"Weed {i+1}"
             cv2.putText(image_with_bboxes, label, (x1, y1 - 10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+
+        # Add summary text
+        summary_text = f"Crops: {len(crops)}, Weeds: {len(weeds)}"
+        cv2.putText(image_with_bboxes, summary_text, (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+
         cv2.imwrite(OUTPUT_BBOX_IMAGE_PATH, image_with_bboxes)
         logger.info(f"Image with bounding boxes saved to {OUTPUT_BBOX_IMAGE_PATH}")
 
-        # --- Image with Grid and ALL Target Cells ---
+        # --- Image with Grid and WEED Target Cells ---
         image_with_grid = balanced_frame.copy()
         image_with_grid = grid_mapper.draw_grid(image_with_grid)
 
-        if len(detections) > 0:
-            # Draw all target cells with different colors based on priority
+        if len(weeds) > 0:
+            # Draw weed target cells with different colors based on priority
             colors = [
                 (0, 0, 255),    # Red - highest priority (closest)
                 (0, 165, 255),  # Orange
@@ -263,8 +295,10 @@ def main():
                 (255, 0, 255),  # Magenta
             ]
 
-            for i, det in enumerate(detections):
-                x1, y1, x2, y2, _, _ = map(int, det[:6])
+            # Draw ONLY weed target cells (not crops)
+            for i, det in enumerate(weeds):
+                x1, y1, x2, y2, _, _ = det[0], det[1], det[2], det[3], det[4], det[5]
+                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
                 center_x = int((x1 + x2) / 2)
                 center_y = int((y1 + y2) / 2)
                 grid_x, grid_y = grid_mapper.pixel_to_grid(center_x, center_y)
@@ -279,8 +313,13 @@ def main():
                 cv2.putText(image_with_grid, str(i+1), (cell_center_x - 10, cell_center_y + 10),
                            cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 3)
 
+        # Add summary text
+        summary_text = f"Crops: {len(crops)}, Weeds: {len(weeds)}"
+        cv2.putText(image_with_grid, summary_text, (10, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+
         cv2.imwrite(OUTPUT_GRID_IMAGE_PATH, image_with_grid)
-        logger.info(f"Image with grid and ALL target cells saved to {OUTPUT_GRID_IMAGE_PATH}")
+        logger.info(f"Image with grid and WEED target cells saved to {OUTPUT_GRID_IMAGE_PATH}")
 
     except KeyboardInterrupt:
         logger.warning("System operation interrupted by user (Ctrl+C).")

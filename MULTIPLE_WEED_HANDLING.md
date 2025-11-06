@@ -1,28 +1,35 @@
 # Multiple Weed Handling Feature
 
 ## Overview
-The system now processes ALL detected weeds, not just the first one.
+The system now processes ALL detected **weeds** (class 1), not just the first one.
+**Crops** (class 0) are detected but ignored for removal.
 
 ## Features
 
-### 1. **Weed Prioritization**
+### 1. **Class Filtering**
+- **Class 0 = Crops** - Detected and visualized (blue boxes) but NOT processed
+- **Class 1 = Weeds** - Detected, prioritized, and removed (green boxes)
+- Only weeds are sent to the robotic arm for removal
+- Crops are protected and left untouched
+
+### 2. **Weed Prioritization**
 - Weeds are sorted by **distance from center** (closest first)
 - This minimizes arm movement and optimizes removal time
 - Uses Manhattan distance: `|grid_x - center_x| + |grid_y - center_y|`
 
-### 2. **Sequential Processing**
+### 3. **Sequential Processing**
 - Each weed is processed one at a time
 - 1-second delay between weeds for arm stabilization
 - Try-catch error handling for each weed (one failure doesn't stop the whole sequence)
 
-### 3. **Progress Tracking**
+### 4. **Progress Tracking**
 During processing, the system logs:
 - Current weed number (e.g., "Processing Weed 2/5")
 - Grid position and pixel coordinates
 - Confidence score and class
 - Success/failure status for each weed
 
-### 4. **Removal Statistics**
+### 5. **Removal Statistics**
 At the end, displays:
 - Total weeds detected
 - Successfully removed count
@@ -30,14 +37,15 @@ At the end, displays:
 - Success rate percentage
 - List of removed weed IDs
 
-### 5. **Enhanced Visualization**
+### 6. **Enhanced Visualization**
 
 #### Bounding Box Image (`processed_frame_bboxes.jpg`)
-- Shows ALL detected weeds with green bounding boxes
-- Each weed labeled with ID: "Weed 1", "Weed 2", etc.
+- **Crops**: Blue bounding boxes labeled "Crop 1", "Crop 2", etc.
+- **Weeds**: Green bounding boxes labeled "Weed 1", "Weed 2", etc.
+- Summary text showing count: "Crops: X, Weeds: Y"
 
 #### Grid Overlay Image (`processed_frame_grid.jpg`)
-- Shows ALL target cells highlighted in different colors
+- Shows ONLY weed target cells highlighted (crops are not targeted)
 - Color coding:
   - **Red**: Highest priority (closest to center)
   - **Orange**: 2nd priority
@@ -50,6 +58,9 @@ At the end, displays:
 ## Example Output
 
 ```
+Detection complete. Found 10 total detections.
+Classified: 6 crops, 4 weeds
+
 ====================================================================
 WEED REMOVAL SEQUENCE - Priority Order:
 ====================================================================
