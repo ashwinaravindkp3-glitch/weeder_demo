@@ -37,6 +37,52 @@ CAPTURE_DELAY_S = 5
 OUTPUT_BBOX_IMAGE_PATH = 'output/processed_frame_bboxes.jpg'
 OUTPUT_GRID_IMAGE_PATH = 'output/processed_frame_grid.jpg'
 
+# --- Preprocessing Configuration ---
+# Set to False to disable preprocessing (use raw camera feed)
+ENABLE_PREPROCESSING = True
+# Brightness enhancement (0 = none, higher = brighter)
+# For bright environments, use low values (0-10) or disable
+# For dark environments, use higher values (20-40)
+BRIGHTNESS_ADJUSTMENT = 0  # Reduced from 25 for bright environments
+# Contrast multiplier (1.0 = no change, >1.0 = more contrast)
+CONTRAST_MULTIPLIER = 1.0  # Reduced from 1.4 for bright environments
+# CLAHE clip limit (lower = less aggressive enhancement)
+CLAHE_CLIP_LIMIT = 1.5  # Reduced from 2.0
+
+def smart_enhance_custom(frame, brightness=0, contrast=1.0, clahe_clip_limit=1.5):
+    """
+    Enhanced preprocessing with custom parameters.
+
+    Args:
+        frame: Input image
+        brightness: Brightness adjustment (0 = none, higher = brighter)
+        contrast: Contrast multiplier (1.0 = no change)
+        clahe_clip_limit: CLAHE clip limit (lower = less aggressive)
+
+    Returns:
+        Enhanced frame
+    """
+    # Convert to LAB color space
+    lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+
+    # Apply CLAHE to L channel for better contrast (if clip limit > 0)
+    if clahe_clip_limit > 0:
+        clahe = cv2.createCLAHE(clipLimit=clahe_clip_limit, tileGridSize=(8, 8))
+        l_enhanced = clahe.apply(l)
+    else:
+        l_enhanced = l
+
+    # Merge back
+    lab_enhanced = cv2.merge([l_enhanced, a, b])
+    enhanced = cv2.cvtColor(lab_enhanced, cv2.COLOR_LAB2BGR)
+
+    # Apply brightness and contrast adjustments (if needed)
+    if brightness != 0 or contrast != 1.0:
+        enhanced = cv2.convertScaleAbs(enhanced, alpha=contrast, beta=brightness)
+
+    return enhanced
+
 def main():
     """Main function to run the final integrated system."""
     logger.info("====================================================")
@@ -130,10 +176,17 @@ def main():
         mean_brightness = np.mean(frame)
         logger.info(f"Frame captured successfully. Brightness: {mean_brightness:.1f}")
 
-        logger.debug("Preprocessing frame...")
-        enhanced_frame = hardware.smart_enhance(frame)
-        balanced_frame = hardware.auto_white_balance(enhanced_frame)
-        logger.debug("Frame preprocessing complete.")
+        # Apply preprocessing if enabled
+        if ENABLE_PREPROCESSING:
+            logger.debug(f"Preprocessing frame (Brightness: {BRIGHTNESS_ADJUSTMENT}, Contrast: {CONTRAST_MULTIPLIER}, CLAHE: {CLAHE_CLIP_LIMIT})...")
+            # Apply preprocessing with custom settings
+            # Pass custom values to smart_enhance
+            enhanced_frame = smart_enhance_custom(frame, BRIGHTNESS_ADJUSTMENT, CONTRAST_MULTIPLIER, CLAHE_CLIP_LIMIT)
+            balanced_frame = hardware.auto_white_balance(enhanced_frame)
+            logger.debug("Frame preprocessing complete.")
+        else:
+            logger.info("Preprocessing DISABLED - using raw camera frame.")
+            balanced_frame = frame
 
         logger.info("Performing weed detection...")
         results = model(balanced_frame, verbose=False)
